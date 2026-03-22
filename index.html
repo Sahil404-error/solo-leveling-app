@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Solo Leveling System</title>
+
+<link rel="manifest" href="manifest.json">
+
+<!-- Firebase (COMPAT VERSION - IMPORTANT) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+
+<style>
+body {
+  background: radial-gradient(circle, #0a0f2c, #000);
+  color: #00f7ff;
+  font-family: Arial;
+  text-align: center;
+}
+h1 { text-shadow: 0 0 10px #00f7ff; }
+.box {
+  background: rgba(0,0,0,0.6);
+  border: 1px solid #00f7ff;
+  margin: 10px;
+  padding: 15px;
+  border-radius: 10px;
+}
+button {
+  background: #00f7ff;
+  border: none;
+  padding: 6px 10px;
+  margin: 3px;
+  border-radius: 6px;
+}
+.progress { background:#111; border-radius:10px; }
+.progress-bar {
+  height: 15px;
+  background:#00f7ff;
+  width:0%;
+  transition:0.4s;
+}
+</style>
+</head>
+
+<body>
+
+<h1>🔥 Solo Leveling System</h1>
+
+<!-- AUTH -->
+<div id="authBox" class="box">
+  <input id="email" placeholder="Email"><br>
+  <input id="password" type="password" placeholder="Password"><br>
+  <button onclick="signup()">Signup</button>
+  <button onclick="login()">Login</button>
+</div>
+
+<!-- APP -->
+<div id="app" style="display:none">
+
+<div class="box">
+  Level: <span id="level"></span> |
+  Rank: <span id="rank"></span><br>
+
+  <div class="progress">
+    <div id="xpBar" class="progress-bar"></div>
+  </div>
+
+  XP: <span id="xp"></span>/100<br>
+  Coins: <span id="coins"></span>
+</div>
+
+<div class="box">
+  <input id="taskInput" placeholder="New Task">
+  <select id="type">
+    <option value="str">Strength</option>
+    <option value="int">Intelligence</option>
+    <option value="dis">Discipline</option>
+  </select>
+  <button onclick="addTask()">Add</button>
+</div>
+
+<div class="box" id="tasks"></div>
+
+<div class="box">
+  STR: <span id="str"></span><br>
+  INT: <span id="int"></span><br>
+  DIS: <span id="dis"></span>
+</div>
+
+<div class="box">
+  <button onclick="undo()">Undo</button>
+  <button onclick="buyReward()">Use Coins</button>
+</div>
+
+<button onclick="logout()">Logout</button>
+
+</div>
+
+<div id="notif"></div>
+
+<script>
+// Firebase Config
+const firebaseConfig = {
+  apiKey: "AIzaSyAQ9KxYWwkA0e0FXs6bOmFCnCdIyZQ3WRs",
+  authDomain: "sololevelingcute.firebaseapp.com",
+  databaseURL: "https://sololevelingcute-default-rtdb.firebaseio.com",
+  projectId: "sololevelingcute",
+  storageBucket: "sololevelingcute.firebasestorage.app",
+  messagingSenderId: "929655060188",
+  appId: "1:929655060188:web:a29109b8961280f53f6619"
+};
+
+firebase.initializeApp(firebaseConfig);
+
+const auth = firebase.auth();
+const db = firebase.database();
+
+let userId;
+
+// DATA
+let data = {
+  level:1, xp:0, coins:0,
+  stats:{str:0,int:0,dis:0},
+  tasks:[], history:[],
+  lastReset:null
+};
+
+// AUTH
+function signup(){
+  auth.createUserWithEmailAndPassword(email.value, password.value)
+  .catch(e=>alert(e.message));
+}
+
+function login(){
+  auth.signInWithEmailAndPassword(email.value, password.value)
+  .catch(e=>alert(e.message));
+}
+
+function logout(){
+  auth.signOut();
+}
+
+// AUTH STATE
+auth.onAuthStateChanged(user=>{
+  if(user){
+    userId = user.uid;
+    authBox.style.display="none";
+    app.style.display="block";
+    loadData();
+  } else {
+    authBox.style.display="block";
+    app.style.display="none";
+  }
+});
+
+// LOAD DATA
+function loadData(){
+  db.ref("users/"+userId).on("value", snap=>{
+    if(snap.exists()) data = snap.val();
+    checkDailyReset();
+    render();
+  });
+}
+
+// SAVE
+function save(){
+  db.ref("users/"+userId).set(data);
+}
+
+// RENDER
+function render(){
+  level.innerText = data.level;
+  xp.innerText = data.xp;
+  coins.innerText = data.coins;
+  rank.innerText = getRank();
+
+  xpBar.style.width = data.xp + "%";
+
+  str.innerText = data.stats.str;
+  int.innerText = data.stats.int;
+  dis.innerText = data.stats.dis;
+
+  tasks.innerHTML="";
+  data.tasks.forEach((t,i)=>{
+    tasks.innerHTML += `
+      ${t.name}
+      <button onclick="complete(${i})">✔</button>
+      <button onclick="deleteTask(${i})">❌</button><br>
+    `;
+  });
+}
+
+// TASKS
+function addTask(){
+  if(!taskInput.value) return;
+
+  saveHistory();
+  data.tasks.push({name:taskInput.value,type:type.value});
+  taskInput.value="";
+  save();
+}
+
+function complete(i){
+  saveHistory();
+
+  let t = data.tasks[i];
+  data.xp += 20;
+  data.coins += 10;
+  data.stats[t.type]++;
+
+  if(data.xp >= 100){
+    data.level++;
+    data.xp = 0;
+    notify("🔥 LEVEL UP!");
+  }
+
+  data.tasks.splice(i,1);
+  save();
+}
+
+function deleteTask(i){
+  saveHistory();
+  data.tasks.splice(i,1);
+  save();
+}
+
+// UNDO
+function saveHistory(){
+  data.history.push(JSON.stringify(data));
+  if(data.history.length > 20) data.history.shift();
+}
+
+function undo(){
+  if(!data.history.length) return;
+  data = JSON.parse(data.history.pop());
+  save();
+}
+
+// RANK
+function getRank(){
+  if(data.level<5) return "E";
+  if(data.level<10) return "D";
+  if(data.level<20) return "C";
+  if(data.level<30) return "B";
+  if(data.level<50) return "A";
+  return "S";
+}
+
+// RESET
+function checkDailyReset(){
+  let today = new Date().toDateString();
+  if(data.lastReset !== today){
+    data.tasks = [];
+    data.lastReset = today;
+    save();
+  }
+}
+
+// SHOP
+function buyReward(){
+  if(data.coins >= 50){
+    data.coins -= 50;
+    notify("🎉 Reward Used!");
+    save();
+  } else notify("❌ Not enough coins");
+}
+
+// NOTIFICATION
+function notify(msg){
+  notif.innerText = msg;
+  setTimeout(()=>notif.innerText="",2000);
+}
+
+// SERVICE WORKER
+if("serviceWorker" in navigator){
+  navigator.serviceWorker.register("service-worker.js");
+}
+</script>
+
+</body>
+</html>
