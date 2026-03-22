@@ -49,11 +49,18 @@ button {
 <h1>🔥 Solo Leveling System</h1>
 
 <!-- AUTH -->
-<div id="authBox" class="box">
-  <input id="email" placeholder="Email"><br>
-  <input id="password" type="password" placeholder="Password"><br>
-  <button onclick="signup()">Signup</button>
-  <button onclick="login()">Login</button>
+<div id="authBox" class="auth-container">
+  <div class="auth-card">
+    <h2>System Access</h2>
+
+    <input id="email" placeholder="Enter Email">
+    <input id="password" type="password" placeholder="Enter Password">
+
+    <button onclick="login()">Login</button>
+    <button onclick="signup()">Create Account</button>
+
+    <p class="tagline">⚡ Become Stronger Everyday</p>
+  </div>
 </div>
 
 <!-- APP -->
